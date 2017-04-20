@@ -1,5 +1,5 @@
 {
-  "name": "@fasterthanlime/electron-compilers",
+  "name": "electron-compilers-ftl",
   "version": "5.8.0",
   "description": "Compiler implementations for electron-compile",
   "main": "lib/main.js",
