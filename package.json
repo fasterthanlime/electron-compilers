@@ -1,5 +1,5 @@
 {
-  "name": "electron-compilers",
+  "name": "@fasterthanlime/electron-compilers",
   "version": "5.8.0",
   "description": "Compiler implementations for electron-compile",
   "main": "lib/main.js",
