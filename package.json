@@ -1,6 +1,6 @@
 {
   "name": "electron-compilers-ftl",
-  "version": "5.8.0",
+  "version": "5.8.4",
   "description": "Compiler implementations for electron-compile",
   "main": "lib/main.js",
   "scripts": {
@@ -50,6 +50,7 @@
     "rimraf": "^2.5.4",
     "sass-lookup": "^1.0.2",
     "sass.js": "^0.10.1",
+    "sorcery": "^0.10.0",
     "stylus": "^0.54.5",
     "stylus-lookup": "^1.0.1",
     "toutsuite": "^0.6.0",

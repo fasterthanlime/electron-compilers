@@ -1,5 +1,6 @@
 import {SimpleCompilerBase} from '../compiler-base';
 import path from 'path';
+import sorcery from 'sorcery';
 import jsEscape from 'js-string-escape';
 
 const inputMimeTypes = ['text/typescript', 'text/tsx'];
@@ -8,7 +9,7 @@ const d = require('debug')('electron-compile:typescript-compiler');
 let ts = null;
 let istanbul = null;
 
-const builtinKeys = ['hotModuleReload', 'coverage'];
+const builtinKeys = ['hotModuleReload', 'coverage', 'babel'];
 
 export default class TypeScriptCompiler extends SimpleCompilerBase {
   constructor() {
@@ -60,8 +61,8 @@ export default class TypeScriptCompiler extends SimpleCompilerBase {
       fileName: filePath.match(/\.(ts|tsx)$/i) ? path.basename(filePath) : null
     };
 
-    if (isTsx && options.builtinOpts.hotModuleReload === true) {
-      sourceCode = this.addHotModuleLoadingRegistration(sourceCode, filePath, this.getExportsForFile(filePath, options.typescriptOpts));
+    if (isTsx && options.builtinOpts.hotModuleReload !== false) {
+      sourceCode = this.addHotModuleLoadingRegistration(sourceCode, filePath, this.getExportsForFile(sourceCode, filePath, options.typescriptOpts));
     }
 
     let output = ts.transpileModule(sourceCode, transpileOptions);
@@ -76,6 +77,44 @@ export default class TypeScriptCompiler extends SimpleCompilerBase {
 
     d(JSON.stringify(output.diagnostics));
 
+    const babelOpts = this.parsedConfig.builtinOpts.babel;
+    if (babelOpts) {
+      if (!this.babel) {
+        const BabelCompiler = require("./babel").default;
+        this.babel = new BabelCompiler();
+        this.babel.compilerOptions = babelOpts;
+      }
+      if (!this.sorcery) {
+        this.sorcer = require("sorcery");
+      }
+      let tsOutputPath = filePath.replace(/.tsx?$/i, ".js");
+      let babelOutputPath = filePath.replace(/.tsx?$/i, ".babel.js");
+
+      output.outputText = output.outputText.replace(/\/\/# sourceMap.*/g, "");
+
+      let babelOutput = this.babel.compileSync(output.outputText, tsOutputPath);
+      let chain = sorcery.loadSync(babelOutputPath, {
+        content: {
+          [filePath]: sourceCode,
+          [tsOutputPath]: output.outputText,
+          [babelOutputPath]: babelOutput.code,
+        },
+        sourcemaps: {
+          [tsOutputPath]: JSON.parse(sourceMaps),
+          [babelOutputPath]: JSON.parse(babelOutput.sourceMaps),
+        }
+      });
+      let finalSourceMaps = chain.apply();
+      let outputCode = babelOutput.code + "\n//# sourceMappingURL=" + finalSourceMaps.toUrl();
+
+      // the only way to make sourceMaps usable seems to be to have
+      // them inlined right now, see https://github.com/electron/electron-compile/issues/172#issuecomment-277146112
+      return {
+        code: outputCode,
+        mimeType: babelOutput.mimeType,
+      };
+    }
+
     return {
       code: output.outputText,
       mimeType: this.outMimeType,
@@ -87,7 +126,7 @@ export default class TypeScriptCompiler extends SimpleCompilerBase {
     if (exports.length < 1) return sourceCode;
 
     let registrations = exports.map(x => {
-      let id = `${x}` == 'default' ? "_default" : `${x}`
+      let id = `${x}` == 'default' ? '(typeof _default !== \'undefined\' ? _default : exports.default)' : `${x}`
       let name = `"${x}"`
       return `__REACT_HOT_LOADER__.register(${id}, ${name}, __FILENAME__);\n`
     });
@@ -103,9 +142,8 @@ if (typeof __REACT_HOT_LOADER__ !== 'undefined') {
     return tmpl;
   }
 
-  getExportsForFile(fileName, tsOptions) {
-    let pg = ts.createProgram([fileName], tsOptions);
-    let c = pg.getTypeChecker();
+  getExportsForFile(sourceCode, fileName, tsOptions) {
+    let sourceFile = ts.createSourceFile(fileName, sourceCode, ts.ScriptTarget.ES6);
     let ret = [];
 
     // Walk the tree to search for classes
@@ -113,18 +151,11 @@ if (typeof __REACT_HOT_LOADER__ !== 'undefined') {
       if (!this.isNodeExported(node)) return;
       
       if (node.kind === ts.SyntaxKind.ClassDeclaration || node.kind === ts.SyntaxKind.FunctionDeclaration) {
-        ret.push(c.getSymbolAtLocation(node.name).getName());
+        ret.push(node.name.text);
       }
     };
 
-    let filePathWithForwardSlashes = fileName.replace(/[\\]/g, '/');
-    for (const sourceFile of pg.getSourceFiles()) {
-      if (sourceFile.fileName !== filePathWithForwardSlashes) {
-        continue;
-      }
-      
-      ts.forEachChild(sourceFile, visit);
-    }
+    ts.forEachChild(sourceFile, visit);
 
     return ret;
   }
