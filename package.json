@@ -1,6 +1,6 @@
 {
   "name": "electron-compilers-ftl",
-  "version": "5.9.4",
+  "version": "5.9.5",
   "description": "Compiler implementations for electron-compile",
   "main": "lib/main.js",
   "scripts": {
