@@ -135,8 +135,10 @@ export default class TypeScriptCompiler extends SimpleCompilerBase {
       // the user asked for inline source maps, we want to give them inline source maps.
       if (this.babel.compilerOptions.sourceMaps === "inline" && sourceMaps) {
         // remove any references and convert external sourcemaps to inline
-        code = convertSourceMap.removeComments(code);
-        code += "\n" + convertSourceMap.fromJSON(sourceMaps).toComment();
+        code = convertSourceMap.removeMapFileComments(code);
+        const sm = convertSourceMap.fromJSON(sourceMaps);
+        sm.setProperty("sourcesContent", [sourceCode])
+        code += "\n" + sm.toComment();
         sourceMaps = null;
       }
 
